@@ -9,8 +9,8 @@ configure:
 edit config-dev.yml
 storage:
     upyun:
-        username: yejingx
-        password: yejingx123
-        bucket: yejingx
-        rootdirectory: /var00/lib/registry/
+        username: username
+        password: password
+        bucket: bucket
+        rootdirectory: /var/lib/registry/
     
