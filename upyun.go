@@ -122,19 +122,7 @@ func (d *driver) GetContent(ctx context.Context, path string) ([]byte, error) {
 		return nil, err
 	}
 
-	buf, err := ioutil.ReadAll(b)
-
-	return buf, err
-	rc, err := d.Reader(ctx, path, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	p, err := ioutil.ReadAll(rc)
-	if err != nil {
-		return nil, err
-	}
-	return p, nil
+	return ioutil.ReadAll(b)
 }
 
 func (d *driver) PutContent(ctx context.Context, path string, contents []byte) error {
@@ -142,13 +130,14 @@ func (d *driver) PutContent(ctx context.Context, path string, contents []byte) e
 	if err := d.Client.Mkdir(fullPath[:strings.LastIndex(fullPath, "/")]); err != nil {
 		return storagedriver.InvalidPathError{Path: path}
 	}
-	for {
-		body := bytes.NewBuffer(contents)
-		_, err := d.Client.Put(fullPath, body, false, nil)
-		if err != nil {
-			return storagedriver.InvalidPathError{Path: path}
-		}
 
+	body := bytes.NewBuffer(contents)
+	_, err := d.Client.Put(fullPath, body, false, nil)
+	if err != nil {
+		return storagedriver.InvalidPathError{Path: path}
+	}
+
+	for {
 		fi, err := d.Client.GetInfo(fullPath)
 		if err != nil {
 			return storagedriver.InvalidPathError{Path: path}
@@ -204,20 +193,8 @@ func (d *driver) Delete(ctx context.Context, sourcePath string) error {
 		for _, file := range files {
 			d.Delete(ctx, file)
 		}
-		for {
-			if err := d.Client.Delete(d.fullPath(sourcePath)); err == nil {
-				break
-			}
-			time.Sleep(time.Second)
-		}
-	} else {
-		for {
-			if err := d.Client.Delete(d.fullPath(sourcePath)); err == nil {
-				break
-			}
-			time.Sleep(time.Second)
-		}
 	}
+	d.Client.AsyncDelete(d.fullPath(sourcePath))
 
 	return nil
 }
@@ -356,14 +333,15 @@ func (w *writer) Close() error {
 
 	fullPath := w.driver.fullPath(w.key)
 
+	body := bytes.NewBuffer(w.readyPart)
+	if err := w.driver.Client.Mkdir(fullPath[:strings.LastIndex(fullPath, "/")]); err != nil {
+		return storagedriver.InvalidPathError{Path: w.key}
+	}
+	if _, err := w.driver.Client.Put(fullPath, body, false, nil); err != nil {
+		return storagedriver.InvalidPathError{Path: w.key}
+	}
+
 	for {
-		body := bytes.NewBuffer(w.readyPart)
-		if err := w.driver.Client.Mkdir(fullPath[:strings.LastIndex(fullPath, "/")]); err != nil {
-			return storagedriver.InvalidPathError{Path: w.key}
-		}
-		if _, err := w.driver.Client.Put(fullPath, body, false, nil); err != nil {
-			return storagedriver.InvalidPathError{Path: w.key}
-		}
 
 		fi, _ := w.driver.Client.GetInfo(fullPath)
 		if fi.Size == int64(len(w.readyPart)) {
@@ -387,14 +365,15 @@ func (w *writer) Commit() error {
 	}
 	w.committed = true
 
+	body := bytes.NewBuffer(w.readyPart)
+	if err := w.driver.Client.Mkdir(fullPath[:strings.LastIndex(fullPath, "/")]); err != nil {
+		return storagedriver.InvalidPathError{Path: w.key}
+	}
+	if _, err := w.driver.Client.Put(fullPath, body, false, nil); err != nil {
+		return storagedriver.InvalidPathError{Path: w.key}
+	}
+
 	for {
-		body := bytes.NewBuffer(w.readyPart)
-		if err := w.driver.Client.Mkdir(fullPath[:strings.LastIndex(fullPath, "/")]); err != nil {
-			return storagedriver.InvalidPathError{Path: w.key}
-		}
-		if _, err := w.driver.Client.Put(fullPath, body, false, nil); err != nil {
-			return storagedriver.InvalidPathError{Path: w.key}
-		}
 		fi, _ := w.driver.Client.GetInfo(fullPath)
 		if fi.Size == int64(len(w.readyPart)) {
 			break
