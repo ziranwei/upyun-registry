@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"path"
 	"strings"
-	"time"
 
 	"github.com/docker/distribution/context"
 
@@ -137,17 +136,6 @@ func (d *driver) PutContent(ctx context.Context, path string, contents []byte) e
 		return storagedriver.InvalidPathError{Path: path}
 	}
 
-	for {
-		fi, err := d.Client.GetInfo(fullPath)
-		if err != nil {
-			return storagedriver.InvalidPathError{Path: path}
-		}
-
-		if fi.Size == int64(len(contents)) {
-			break
-		}
-		time.Sleep(time.Second)
-	}
 	return nil
 }
 
@@ -236,20 +224,8 @@ func (d *driver) Move(ctx context.Context, sourcePath string, destPath string) e
 			return err
 		}
 
-		for {
-			if err := d.PutContent(ctx, destPath, b); err != nil {
-				return nil
-			}
-			fullPath := d.fullPath(destPath)
-			fi, err := d.Client.GetInfo(fullPath)
-			if err != nil {
-				return err
-			}
-
-			if fi.Size == int64(len(b)) {
-				break
-			}
-			time.Sleep(time.Second)
+		if err := d.PutContent(ctx, destPath, b); err != nil {
+			return nil
 		}
 
 		d.Client.AsyncDelete(d.fullPath(sourcePath))
@@ -341,14 +317,6 @@ func (w *writer) Close() error {
 		return storagedriver.InvalidPathError{Path: w.key}
 	}
 
-	for {
-
-		fi, _ := w.driver.Client.GetInfo(fullPath)
-		if fi.Size == int64(len(w.readyPart)) {
-			break
-		}
-		time.Sleep(time.Second)
-	}
 	w.closed = true
 
 	return nil
@@ -371,14 +339,6 @@ func (w *writer) Commit() error {
 	}
 	if _, err := w.driver.Client.Put(fullPath, body, false, nil); err != nil {
 		return storagedriver.InvalidPathError{Path: w.key}
-	}
-
-	for {
-		fi, _ := w.driver.Client.GetInfo(fullPath)
-		if fi.Size == int64(len(w.readyPart)) {
-			break
-		}
-		time.Sleep(time.Second)
 	}
 
 	return nil
